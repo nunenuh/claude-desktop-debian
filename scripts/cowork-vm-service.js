@@ -1099,7 +1099,24 @@ class KvmBackend extends BackendBase {
         }
 
         // smol-bin disk (contains SDK binaries → /dev/vdc, detected
-        // by guest via blkid). Check bundle dir first, then VM_BASE_DIR.
+        // by guest via blkid). The app copies smol-bin.vhdx from
+        // resources to bundleDir at startup. Convert to qcow2 if needed.
+        const smolVhdx = path.join(bundleDir, 'smol-bin.vhdx');
+        const smolQcow2 = path.join(bundleDir, 'smol-bin.qcow2');
+        if (fs.existsSync(smolVhdx) && !fs.existsSync(smolQcow2)) {
+            log('KvmBackend: converting smol-bin.vhdx to qcow2...');
+            try {
+                execFileSync('qemu-img', [
+                    'convert', '-f', 'vhdx', '-O', 'qcow2',
+                    smolVhdx, smolQcow2
+                ], { stdio: 'pipe', timeout: 60000 });
+                log('KvmBackend: smol-bin conversion complete');
+            } catch (e) {
+                log(`KvmBackend: smol-bin conversion failed: ` +
+                    e.message);
+            }
+        }
+        // Check bundle dir first, then VM_BASE_DIR.
         // Not fatal if missing — SDK can be accessed via virtiofs.
         const smolBinPath =
             [bundleDir, VM_BASE_DIR]

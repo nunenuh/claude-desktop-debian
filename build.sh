@@ -1273,6 +1273,45 @@ if (serviceErrorIdx !== -1) {
     }
 }
 
+// ============================================================
+// Patch 9: Copy smol-bin VHDX on Linux (not just win32)
+// The app copies smol-bin from resources to the bundle dir at
+// startup, but only on win32. Extend to include Linux so the
+// KVM guest can access SDK binaries from the smol-bin disk.
+// Anchor: unique string "smol-bin" near platform==="win32"
+// Strategy: find the win32 check that precedes "smol-bin" and
+// extend it to also match Linux.
+// ============================================================
+{
+    const smolIdx = code.indexOf('smol-bin');
+    if (smolIdx !== -1) {
+        // Search backwards for the nearest platform==="win32" check
+        const searchStart = Math.max(0, smolIdx - 300);
+        const before = code.substring(searchStart, smolIdx);
+        const win32Re = /process\.platform==="win32"/g;
+        let lastWin32 = null;
+        let m;
+        while ((m = win32Re.exec(before)) !== null) {
+            lastWin32 = m;
+        }
+        if (lastWin32) {
+            const absIdx = searchStart + lastWin32.index;
+            const oldStr = lastWin32[0];
+            const newStr =
+                '(process.platform==="win32"' +
+                '||process.platform==="linux")';
+            code = code.substring(0, absIdx) +
+                newStr + code.substring(absIdx + oldStr.length);
+            console.log('  Patched smol-bin copy to include Linux');
+            patchCount++;
+        } else {
+            console.log('  WARNING: Could not find win32 gate near smol-bin');
+        }
+    } else {
+        console.log('  WARNING: Could not find smol-bin reference');
+    }
+}
+
 fs.writeFileSync(indexJs, code);
 console.log(`  Applied ${patchCount} cowork patches`);
 if (patchCount < 5) {
@@ -1503,6 +1542,42 @@ copy_ssh_helpers() {
 	section_footer 'SSH Helpers'
 }
 
+copy_cowork_resources() {
+	section_header 'Cowork Resources'
+
+	local resources_src="$claude_extract_dir/lib/net45/resources"
+
+	# Copy cowork-plugin-shim.sh (used by app for MCP plugin sandboxing)
+	local shim_src="$resources_src/cowork-plugin-shim.sh"
+	if [[ -f $shim_src ]]; then
+		cp "$shim_src" "$electron_resources_dest/cowork-plugin-shim.sh"
+		chmod +x "$electron_resources_dest/cowork-plugin-shim.sh"
+		echo "Copied cowork-plugin-shim.sh"
+	else
+		echo "Warning: cowork-plugin-shim.sh not found at $shim_src"
+	fi
+
+	# Copy smol-bin VHDX (contains SDK binaries for KVM guest VM).
+	# The app copies this from resources to the bundle dir at startup
+	# (win32-gated; our index.js patch extends this to Linux).
+	# App looks for smol-bin.{arch}.vhdx where arch is x64 or arm64.
+	local smol_arch='x64'
+	if [[ $architecture == 'arm64' ]]; then
+		smol_arch='arm64'
+	fi
+	local smol_vhdx="$resources_src/smol-bin.${smol_arch}.vhdx"
+	if [[ -f $smol_vhdx ]]; then
+		cp "$smol_vhdx" \
+			"$electron_resources_dest/smol-bin.${smol_arch}.vhdx"
+		echo "Copied smol-bin.${smol_arch}.vhdx"
+	else
+		echo "Warning: smol-bin VHDX not found at $smol_vhdx"
+		echo "KVM Cowork will rely on virtiofs for SDK access"
+	fi
+
+	section_footer 'Cowork Resources'
+}
+
 #===============================================================================
 # Packaging Functions
 #===============================================================================
@@ -1726,6 +1801,7 @@ main() {
 	fi
 	process_icons
 	copy_ssh_helpers
+	copy_cowork_resources
 
 	cd "$project_root" || exit 1
 
