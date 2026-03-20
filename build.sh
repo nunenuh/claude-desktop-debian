@@ -1322,41 +1322,52 @@ if (serviceErrorIdx !== -1) {
 }
 
 // ============================================================
-// Patch 9: Copy smol-bin VHDX on Linux (not just win32)
+// Patch 9: Copy smol-bin VHDX on Linux
 // The app copies smol-bin from resources to the bundle dir at
-// startup, but only on win32. Extend to include Linux so the
-// KVM guest can access SDK binaries from the smol-bin disk.
-// Anchor: unique string "smol-bin" near platform==="win32"
-// Strategy: find the win32 check that precedes "smol-bin" and
-// extend it to also match Linux.
+// startup, but only on win32. That win32 block also calls
+// _.configure() which is Windows-specific (HCS setup) and
+// causes "Request timed out: configure" on Linux (#315).
+// Instead of widening the win32 gate, inject a separate Linux
+// block after it that only does the smol-bin copy.
+// Anchor: unique string "Windows VM service configured"
 // ============================================================
 {
-    const smolIdx = code.indexOf('smol-bin');
-    if (smolIdx !== -1) {
-        // Search backwards for the nearest platform==="win32" check
-        const searchStart = Math.max(0, smolIdx - 300);
-        const before = code.substring(searchStart, smolIdx);
-        const win32Re = /process\.platform==="win32"/g;
-        let lastWin32 = null;
-        let m;
-        while ((m = win32Re.exec(before)) !== null) {
-            lastWin32 = m;
-        }
-        if (lastWin32) {
-            const absIdx = searchStart + lastWin32.index;
-            const oldStr = lastWin32[0];
-            const newStr =
-                '(process.platform==="win32"' +
-                '||process.platform==="linux")';
-            code = code.substring(0, absIdx) +
-                newStr + code.substring(absIdx + oldStr.length);
-            console.log('  Patched smol-bin copy to include Linux');
+    const anchor = '"[VM:start] Windows VM service configured"';
+    const anchorIdx = code.indexOf(anchor);
+    if (anchorIdx !== -1) {
+        // Find the closing of the win32 if-block: "})" or just "}"
+        // after the anchor string. The structure is:
+        //   ...tt.info("[VM:start] Windows VM service configured")));}
+        // We need to insert after that closing "}"
+        const afterAnchor = anchorIdx + anchor.length;
+        // Skip past )); and any whitespace to find the closing }
+        const closingBrace = code.indexOf('}', afterAnchor);
+        if (closingBrace !== -1) {
+            // Insert a Linux-only smol-bin copy block after the }
+            // Uses the same variables available in scope:
+            //   uX() = arch, Qe = path, i = bundlePath,
+            //   ft = fs, vg = stream/pipeline, tt = logger
+            const linuxBlock =
+                'if(process.platform==="linux"){' +
+                'const _la=uX(),' +
+                '_ls=Qe.join(process.resourcesPath,`smol-bin.${_la}.vhdx`),' +
+                '_ld=Qe.join(i,"smol-bin.vhdx");' +
+                'ft.existsSync(_ls)?' +
+                '(tt.info(`[VM:start] Copying smol-bin.${_la}.vhdx to bundle (Linux)`),' +
+                'await vg.pipeline(ft.createReadStream(_ls),ft.createWriteStream(_ld)),' +
+                'tt.info(`[VM:start] smol-bin.${_la}.vhdx copied successfully`))' +
+                ':tt.warn(`[VM:start] smol-bin.${_la}.vhdx not found at ${_ls}`)' +
+                '}';
+            code = code.substring(0, closingBrace + 1) +
+                linuxBlock +
+                code.substring(closingBrace + 1);
+            console.log('  Injected Linux smol-bin copy block (skips _.configure)');
             patchCount++;
         } else {
-            console.log('  WARNING: Could not find win32 gate near smol-bin');
+            console.log('  WARNING: Could not find closing brace after Windows VM service anchor');
         }
     } else {
-        console.log('  WARNING: Could not find smol-bin reference');
+        console.log('  WARNING: Could not find Windows VM service anchor for smol-bin patch');
     }
 }
 
