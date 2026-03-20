@@ -2004,6 +2004,11 @@ function startServer() {
             while (parsed) {
                 buffer = parsed.remaining;
                 const response = await handleRequest(parsed.message, socket);
+                // Echo back request id so persistent-connection clients
+                // can match responses to pending requests.
+                if (parsed.message.id !== undefined) {
+                    response.id = parsed.message.id;
+                }
                 writeMessage(socket, response);
 
                 try {
