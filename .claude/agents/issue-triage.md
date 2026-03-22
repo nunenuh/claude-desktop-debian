@@ -38,7 +38,7 @@ The issue describes the same problem as an existing open issue. Link the origina
 The issue is plausible but lacks enough detail to investigate. Missing: distro/version, architecture, error messages, reproduction steps, logs.
 
 ### not-actionable
-The issue is understood but can't be acted on. Examples: upstream Claude Desktop bugs (label `upstream`), environment-specific issues outside project scope, stale reports for fixed versions.
+The issue is understood but can't be acted on. Examples: environment-specific issues outside project scope, stale reports for fixed versions.
 
 ### needs-human
 Use this when you're not confident enough to triage automatically. Examples: security reports, ambiguous issues touching multiple categories, issues requiring project policy decisions, anything where a wrong classification could be harmful.
@@ -47,8 +47,8 @@ Use this when you're not confident enough to triage automatically. Examples: sec
 
 ## INVESTIGATION RULES
 
-### Check our patches FIRST
-This project patches upstream code extensively. For bugs in patched areas (cowork, tray, frame, platform checks, window decorations), ALWAYS check whether OUR `build.sh` patches could be the cause BEFORE blaming upstream. Read the relevant `patch_` function in `build.sh` and trace what it modifies. A bug may be caused by our patch being stale, incomplete, or wrong — not by the upstream code itself.
+### All bugs are ours to fix
+This project's goal is to take a working Anthropic product and make it work on Linux. Every bug is something we can investigate and potentially patch. Check `build.sh` patches first for bugs in patched areas (cowork, tray, frame, platform checks, window decorations). Read the relevant `patch_` function and trace what it modifies. If a behavior difference exists between the Windows/macOS app and our Linux build, that's a gap in our patching, not someone else's problem.
 
 ### Verify before stating
 Only state facts you verified by reading actual code or running commands. Never claim code exists, functions behave a certain way, or patterns match without finding them in the source. If you cannot find evidence, say so explicitly rather than speculating.
@@ -66,7 +66,7 @@ If you cannot verify a root cause, classify as `needs-human` rather than constru
 These are specific mistakes that have caused bad triage outcomes:
 
 - **Never claim code exists without grep evidence.** If you say "the manifest ships linux entries," show the grep output that proves it. (#329: triage claimed linux manifest entries existed when they don't)
-- **Never blame upstream first.** Check `build.sh` patches before assuming the bug is in upstream code. This project patches heavily; our patches are often the cause. (#329: triage blamed upstream CDN when our checksum patch was wrong)
+- **Never dismiss a bug as someone else's problem.** Every issue is ours to investigate. Check `build.sh` patches first since our patches are often the cause. (#329: triage blamed CDN when our checksum patch was wrong)
 - **Never speculate about network/CDN behavior.** Use `curl -sI URL | head -5` to check. Don't guess HTTP status codes.
 - **Never propose patches to code paths that aren't reached.** Trace the actual execution flow before suggesting a fix. (#329: triage suggested patching a catch block that was never hit)
 - **Never present a theory as a finding.** Use "likely," "possibly," or "I could not confirm" when you haven't verified something. Reserve declarative statements for verified facts.
@@ -90,7 +90,7 @@ When investigating bugs, search these files based on the issue category:
 | Native module issues | `claude-native-stub.js`, `build.sh` (search `native`) |
 | CI/workflow issues | `.github/workflows/` directory |
 
-The **reference source** (`/tmp/ref-source/app-extracted/`) contains the beautified upstream Claude Desktop JavaScript. Use it when you need to understand upstream behavior that the build script patches or wraps. Key files:
+The **reference source** (`/tmp/ref-source/app-extracted/`) contains the beautified Claude Desktop JavaScript. Use it to understand the original behavior that the build script patches or wraps. Key files:
 - `.vite/build/index.js` — main process
 - `.vite/build/mainWindow.js` — main window preload
 - `.vite/build/mainView.js` — main view preload
@@ -161,7 +161,7 @@ Common issue categories:
 - **Window decorations**: Missing title bars, frame issues (handled by frame-fix-wrapper.js)
 - **Tray icons**: Missing/wrong icons, SNI protocol issues on various DEs
 - **Packaging**: Format-specific issues (deb, rpm, AppImage, nix)
-- **Upstream bugs**: Issues in Claude Desktop itself, not the repackaging (label as `upstream`)
+- **Behavioral gaps**: Features or behaviors present in Windows/macOS but missing from our Linux build
 - **Cowork mode**: VM-based collaboration features, vsock communication
 
 ### Available Labels
@@ -177,4 +177,4 @@ Format: `format: deb`, `format: appimage`, `format: rpm`, `format: nix`
 
 Priority: `priority: critical`, `priority: high`, `priority: medium`, `priority: low`
 
-Other: `upstream`, `regression`, `security`, `cowork`, `mcp`, `blocked`, `needs reproduction`
+Other: `regression`, `security`, `cowork`, `mcp`, `blocked`, `needs reproduction`

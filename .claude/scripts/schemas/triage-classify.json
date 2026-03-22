@@ -37,7 +37,7 @@
     "suggested_labels": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Additional labels to apply beyond the triage label (e.g. bug, enhancement, upstream, platform: amd64)"
+      "description": "Additional labels to apply beyond the triage label (e.g. bug, enhancement, cowork, platform: amd64)"
     },
     "summary": {
       "type": "string",
