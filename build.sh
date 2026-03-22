@@ -1195,14 +1195,10 @@ if (!code.includes('"linux":{') && !code.includes("'linux':{") &&
                 let linuxArm64 = '[]';
                 if (win32x64 && win32x64.includes('name')) {
                     linuxX64 = replaceChecksums(win32x64, 'x64');
-                    console.log('  Built linux x64 entries from' +
-                        ' win32 structure');
                 }
                 if (win32arm64 && win32arm64.includes('name')) {
                     linuxArm64 = replaceChecksums(
                         win32arm64, 'arm64');
-                    console.log('  Built linux arm64 entries from' +
-                        ' win32 structure');
                 }
 
                 const insertPos = filesEnd - 1;

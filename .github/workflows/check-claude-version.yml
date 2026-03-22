@@ -227,6 +227,10 @@ jobs:
           fi
 
           WORK=$(mktemp -d)
+          # Clean up temp files on any exit path
+          skip_vm() { echo "bundle_sha=" >> $GITHUB_OUTPUT; }
+          trap 'rm -rf "$WORK"; rm -f "$INSTALLER"' EXIT
+
           echo "Extracting installer to find bundle SHA..."
 
           # Extract exe → nupkg → app.asar → index.js
@@ -234,40 +238,30 @@ jobs:
           NUPKG=$(find "$WORK/exe" -name "AnthropicClaude-*.nupkg" | head -1)
           if [ -z "$NUPKG" ]; then
             echo "No nupkg found, skipping VM checksums"
-            rm -rf "$WORK"
-            echo "bundle_sha=" >> $GITHUB_OUTPUT
-            exit 0
+            skip_vm; exit 0
           fi
 
           7z x -y -o"$WORK/nupkg" "$NUPKG" > /dev/null 2>&1
           ASAR="$WORK/nupkg/lib/net45/resources/app.asar"
           if [ ! -f "$ASAR" ]; then
             echo "No app.asar found, skipping VM checksums"
-            rm -rf "$WORK"
-            echo "bundle_sha=" >> $GITHUB_OUTPUT
-            exit 0
+            skip_vm; exit 0
           fi
 
           npx --yes @electron/asar extract "$ASAR" "$WORK/app" 2>/dev/null
           INDEX_JS="$WORK/app/.vite/build/index.js"
           if [ ! -f "$INDEX_JS" ]; then
             echo "No index.js found, skipping VM checksums"
-            rm -rf "$WORK"
-            echo "bundle_sha=" >> $GITHUB_OUTPUT
-            exit 0
+            skip_vm; exit 0
           fi
 
           # Extract bundle SHA (40-char hex after sha: or sha:")
           BUNDLE_SHA=$(grep -oP 'sha\s*:\s*"([a-f0-9]{40})"' "$INDEX_JS" \
             | grep -oP '[a-f0-9]{40}' | head -1)
 
-          rm -rf "$WORK"
-          rm -f "$INSTALLER"
-
           if [ -z "$BUNDLE_SHA" ]; then
             echo "Could not extract bundle SHA, skipping VM checksums"
-            echo "bundle_sha=" >> $GITHUB_OUTPUT
-            exit 0
+            skip_vm; exit 0
           fi
 
           echo "Bundle SHA: $BUNDLE_SHA"
@@ -277,8 +271,7 @@ jobs:
             "https://downloads.claude.ai/vms/linux/x64/$BUNDLE_SHA/vmlinuz.zst")
           if [ "$HTTP_CODE" != "200" ]; then
             echo "Linux VM files not published yet (HTTP $HTTP_CODE), skipping"
-            echo "bundle_sha=" >> $GITHUB_OUTPUT
-            exit 0
+            skip_vm; exit 0
           fi
 
           echo "Linux VM files confirmed on CDN"
@@ -299,14 +292,13 @@ jobs:
                 | zstd -d \
                 | sha256sum \
                 | awk '{print $1}'
-            ) || { echo "  FAILED: $label"; echo ""; return; }
+            ) || { echo "  FAILED: $label" >&2; return; }
 
             if [[ ! $hash =~ ^[a-f0-9]{64}$ ]]; then
-              echo "  INVALID hash for $label: $hash"
-              echo ""
+              echo "  INVALID hash for $label: $hash" >&2
               return
             fi
-            echo "  $label: $hash"
+            echo "  $label: $hash" >&2
             echo "$hash"
           }
 
