@@ -621,7 +621,8 @@ print(len(servers))
 		done
 		if [[ $_daemon_orphaned == true ]]; then
 			_warn "Cowork daemon: orphaned (PIDs: $_cowork_pids)"
-			_info 'Fix: Restart Claude Desktop (daemon will be cleaned up automatically)'
+			_info 'Fix: Restart Claude Desktop' \
+				'(daemon will be cleaned up automatically)'
 		else
 			_pass 'Cowork daemon: running (parent alive)'
 		fi
