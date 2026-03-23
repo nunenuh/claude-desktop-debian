@@ -148,15 +148,17 @@ Module.prototype.require = function(id) {
               // resize jitter at ~60Hz), we only act on discrete state
               // changes. Fixes: #239
               const fixChildBounds = () => {
-                if (this.isDestroyed()) return;
+                if (this.isDestroyed()) return false;
                 const children = this.contentView?.children;
-                if (!children?.length) return;
+                if (!children?.length) return false;
                 const [cw, ch] = this.getContentSize();
-                if (cw <= 0 || ch <= 0) return;
+                if (cw <= 0 || ch <= 0) return false;
                 const cur = children[0].getBounds();
                 if (cur.width !== cw || cur.height !== ch) {
                   children[0].setBounds({ x: 0, y: 0, width: cw, height: ch });
+                  return true;
                 }
+                return false;
               };
 
               // Geometry settles in stages after state changes.
@@ -166,6 +168,53 @@ Module.prototype.require = function(id) {
                 fixChildBounds();
                 setTimeout(fixChildBounds, 16);
                 setTimeout(fixChildBounds, 150);
+              };
+
+              // Suppresses resize/moved→fixAfterStateChange cascade
+              // during jiggle. Without this, each setSize triggers the
+              // resize handler, creating 6+ unnecessary timer callbacks.
+              let jiggling = false;
+
+              // Track interactive (user-drag) resizing. will-resize
+              // only fires for user-initiated drags, not programmatic
+              // setSize() or WM-initiated resizes. On Wayland compositors
+              // where will-resize may not fire, the guard stays false —
+              // safe because jiggle only triggers from armed pairs.
+              let userResizing = false;
+              let userResizeTimer = null;
+              this.on('will-resize', () => {
+                userResizing = true;
+                if (userResizeTimer) clearTimeout(userResizeTimer);
+                userResizeTimer = setTimeout(() => { userResizing = false; }, 300);
+              });
+
+              // Debounced 1px jiggle for workspace switches where tile
+              // size is unchanged (bounds match but compositor cache is
+              // stale). Only called from armed-pair handlers, never
+              // from resize/maximize. Same pattern as ready-to-show
+              // but debounced and guarded.
+              // INVARIANT: debounce (100ms) must exceed jiggle duration
+              // (50ms) to prevent overlapping jiggles on rapid workspace
+              // switching. Do not reduce debounce below jiggle timeout.
+              let jiggleTimer = null;
+              const jiggleIfStale = () => {
+                if (jiggleTimer) clearTimeout(jiggleTimer);
+                jiggleTimer = setTimeout(() => {
+                  jiggleTimer = null;
+                  if (this.isDestroyed() || userResizing) return;
+                  if (!fixChildBounds()) {
+                    jiggling = true;
+                    const [w, h] = this.getSize();
+                    this.setSize(w + 1, h);
+                    setTimeout(() => {
+                      if (!this.isDestroyed()) {
+                        this.setSize(w, h);
+                        fixChildBounds();
+                      }
+                      jiggling = false;
+                    }, 50);
+                  }
+                }, 100);
               };
 
               for (const evt of ['maximize', 'unmaximize',
@@ -178,7 +227,7 @@ Module.prototype.require = function(id) {
               // so normal window drags (position-only) are ignored.
               let lastSize = [0, 0];
               this.on('moved', () => {
-                if (this.isDestroyed()) return;
+                if (this.isDestroyed() || jiggling) return;
                 const [w, h] = this.getSize();
                 if (w !== lastSize[0] || h !== lastSize[1]) {
                   lastSize = [w, h];
@@ -191,7 +240,9 @@ Module.prototype.require = function(id) {
               // cache. The size-change guard in fixChildBounds()
               // prevents unnecessary work during drag resize.
               // Fixes: #323
-              this.on('resize', fixAfterStateChange);
+              this.on('resize', () => {
+                if (!jiggling) fixAfterStateChange();
+              });
 
               // ready-to-show fires once per window lifecycle
               this.once('ready-to-show', () => {
@@ -208,9 +259,28 @@ Module.prototype.require = function(id) {
                 }, 50);
               });
 
-              // Fixes: #149 - KDE Plasma: Window demands attention on Alt+Tab
+              // Tiling WMs signal workspace switches via blur/focus
+              // (Hyprland) or hide/show pairs. Jiggle only fires
+              // when fixChildBounds() finds no mismatch (stale
+              // compositor cache on same-size workspace switch).
+              // Fixes: #323
+              let blurArmed = false;
+              this.on('blur', () => { blurArmed = true; });
               this.on('focus', () => {
-                this.flashFrame(false);
+                this.flashFrame(false); // Fixes: #149
+                if (blurArmed) {
+                  blurArmed = false;
+                  jiggleIfStale();
+                }
+              });
+
+              let hideArmed = false;
+              this.on('hide', () => { hideArmed = true; });
+              this.on('show', () => {
+                if (hideArmed) {
+                  hideArmed = false;
+                  jiggleIfStale();
+                }
               });
             }
 
