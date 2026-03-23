@@ -264,24 +264,22 @@ Module.prototype.require = function(id) {
               // when fixChildBounds() finds no mismatch (stale
               // compositor cache on same-size workspace switch).
               // Fixes: #323
-              let blurArmed = false;
-              this.on('blur', () => { blurArmed = true; });
+              const armPair = (armEvt, fireEvt) => {
+                let armed = false;
+                this.on(armEvt, () => { armed = true; });
+                this.on(fireEvt, () => {
+                  if (armed) {
+                    armed = false;
+                    jiggleIfStale();
+                  }
+                });
+              };
+
               this.on('focus', () => {
                 this.flashFrame(false); // Fixes: #149
-                if (blurArmed) {
-                  blurArmed = false;
-                  jiggleIfStale();
-                }
               });
-
-              let hideArmed = false;
-              this.on('hide', () => { hideArmed = true; });
-              this.on('show', () => {
-                if (hideArmed) {
-                  hideArmed = false;
-                  jiggleIfStale();
-                }
-              });
+              armPair('blur', 'focus');
+              armPair('hide', 'show');
             }
 
             console.log('[Frame Fix] Linux patches applied');
