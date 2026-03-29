@@ -17,14 +17,14 @@ pass "Found rpm: $(basename "$rpm_file")"
 # --- RPM metadata ---
 rpm_info=$(rpm -qip "$rpm_file" 2>/dev/null)
 
-if echo "$rpm_info" | grep -q 'Name.*claude-desktop'; then
+if [[ $rpm_info =~ Name.*claude-desktop ]]; then
 	pass "Package name is claude-desktop"
 else
 	fail "Package name is not claude-desktop"
 fi
 
 # --- Install ---
-if rpm -ivh --nodeps "$rpm_file" 2>&1; then
+if rpm -ivh --nodeps "$rpm_file"; then
 	pass "rpm -ivh succeeded"
 else
 	fail "rpm -ivh failed"

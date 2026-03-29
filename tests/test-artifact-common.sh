@@ -6,12 +6,12 @@ _fail_count=0
 
 pass() {
 	printf '[PASS] %s\n' "$*"
-	_pass_count=$((_pass_count + 1))
+	((_pass_count++))
 }
 
 fail() {
 	printf '[FAIL] %s\n' "$*" >&2
-	_fail_count=$((_fail_count + 1))
+	((_fail_count++))
 }
 
 assert_file_exists() {

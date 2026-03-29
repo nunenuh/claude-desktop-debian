@@ -17,19 +17,19 @@ pass "Found deb: $(basename "$deb_file")"
 # --- Package metadata ---
 pkg_info=$(dpkg-deb -I "$deb_file")
 
-if echo "$pkg_info" | grep -q 'Package: claude-desktop'; then
+if [[ $pkg_info == *'Package: claude-desktop'* ]]; then
 	pass "Package name is claude-desktop"
 else
 	fail "Package name is not claude-desktop"
 fi
 
-if echo "$pkg_info" | grep -q 'Architecture: amd64'; then
+if [[ $pkg_info == *'Architecture: amd64'* ]]; then
 	pass "Architecture is amd64"
 else
 	fail "Architecture is not amd64"
 fi
 
-if echo "$pkg_info" | grep -q 'Version:'; then
+if [[ $pkg_info == *'Version:'* ]]; then
 	pass "Version field present"
 else
 	fail "Version field missing"
@@ -37,7 +37,7 @@ fi
 
 # --- Install the package ---
 # Use --force-depends since we only care about file placement
-if sudo dpkg -i --force-depends "$deb_file" 2>&1; then
+if sudo dpkg -i --force-depends "$deb_file"; then
 	pass "dpkg -i succeeded"
 else
 	fail "dpkg -i failed"
